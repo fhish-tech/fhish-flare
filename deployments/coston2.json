@@ -25,6 +25,7 @@
     "ConfidentialToken": "0x33AfEA1582e143D47C391cbE7F59a84e40f5A619",
     "ConfidentialFAsset": "0x6c8EE727F5613545CcdAF8905683EB5229a706b9",
     "PrivateVotingV2": "0x3F561ae7aEdfdf7cc9e97eE9CaeeC628e7Ca62B2",
-    "DecryptionConsumer": "0xAA35738649c9635275C17dE81512a082000Cb458"
+    "DecryptionConsumer": "0xAA35738649c9635275C17dE81512a082000Cb458",
+    "ConfidentialAuction": "0x04FAb1Dc38bC97Ed7a305dc940d9CcED91056Fdb"
   }
 }

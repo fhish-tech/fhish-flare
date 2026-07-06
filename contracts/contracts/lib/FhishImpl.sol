@@ -92,6 +92,18 @@ library FhishImpl {
         result = IFhishCoprocessor($.FhishExecutorAddress).fheDiv(lhs, bytes32(0), bytes1(0x01)); // Placeholder
     }
 
+    function min(bytes32 lhs, bytes32 rhs, bool scalar) internal returns (bytes32 result) {
+        bytes1 scalarByte = scalar ? bytes1(0x01) : bytes1(0x00);
+        FhishConfigStruct storage $ = getFhishConfig();
+        result = IFhishCoprocessor($.FhishExecutorAddress).fheMin(lhs, rhs, scalarByte);
+    }
+
+    function max(bytes32 lhs, bytes32 rhs, bool scalar) internal returns (bytes32 result) {
+        bytes1 scalarByte = scalar ? bytes1(0x01) : bytes1(0x00);
+        FhishConfigStruct storage $ = getFhishConfig();
+        result = IFhishCoprocessor($.FhishExecutorAddress).fheMax(lhs, rhs, scalarByte);
+    }
+
     function eq(bytes32 lhs, bytes32 rhs, bool scalar) internal returns (bytes32 result) {
         bytes1 scalarByte = scalar ? bytes1(0x01) : bytes1(0x00);
         FhishConfigStruct storage $ = getFhishConfig();
