@@ -54,8 +54,9 @@ close()/reveal ──▶ PublicDecryptionRequest ──▶ relayer decrypts ─�
 |---|---|
 | ✅ On-chain FHE + real coprocessor | 🔜 MPC key-sharing so no operator ever sees the FHE secret key (true threshold-FHE) |
 | ✅ Private client-encrypted inputs | 🔜 Full zero-knowledge input proofs (ZKPoK of plaintext knowledge) |
-| ✅ Selective + ACL-gated decryption | 🔜 User re-encryption (`sealoutput` to the user's key) |
+| ✅ Selective + ACL-gated decryption | 🔜 full ZK input proofs (ZKPoK of plaintext) |
 | ✅ **M-of-N threshold KMS committee** | 🔜 native `tfhe-rs` perf, browser-side encryption, audits |
+| ✅ **User re-encryption (`/reencrypt`, sealoutput)** — value sealed to the user's key, never publicly revealed | |
 
 These last items are the same frontier Zama is still hardening for their mainnet — fhish is honest about
 where the trusted boundary is today.

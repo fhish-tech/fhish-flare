@@ -16,6 +16,25 @@ Users interact with a confidential app by **encrypting inputs**, sending a trans
 | `GET /public-key` | the FHE compact public key (hex) for client-side encryption |
 | `POST /encrypt` | `{ value }` → `{ handle }` — encrypt one `euint32` |
 | `POST /encrypt-ballot` | `{ choice, n }` → `{ handles }` — a one-hot ballot |
+| `POST /reencrypt` | `{ handle, userPublicKey, signature }` → `{ sealed }` — decrypt a handle **sealed to the user's key** (ACL-gated; 403 if not allowed) |
+
+## Private reads (sealoutput / re-encryption)
+
+To read an encrypted value **without a public reveal**, request it sealed to your own key:
+
+```ts
+import { reencryptMessage, open } from "fhish/reencrypt"; // helpers
+const userPub = ethers.SigningKey.computePublicKey(wallet.privateKey, false);
+const signature = await wallet.signMessage(reencryptMessage(handle, userPub));
+const { sealed } = await fetch(`${RELAYER_URL}/reencrypt`, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ handle, userPublicKey: userPub, signature }),
+}).then(r => r.json());
+const value = open(sealed, wallet.privateKey); // only you can open it
+```
+
+The relayer checks the on-chain ACL (`FHE.allow(handle, you)`), decrypts, and re-encrypts to your key —
+the plaintext is never public and never crosses the wire in the clear.
 
 ## Casting a confidential vote (RainbowKit + wagmi)
 

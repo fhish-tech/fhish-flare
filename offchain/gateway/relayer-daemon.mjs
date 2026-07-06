@@ -17,6 +17,7 @@ import cors from "cors";
 import { ethers } from "ethers";
 import fs from "fs"; import path from "path"; import { fileURLToPath } from "url";
 import { loadOrGenerateKeys } from "../coprocessor/keys.mjs";
+import { reencryptForUser } from "./reencrypt.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
@@ -38,6 +39,7 @@ const relayer = new ethers.Wallet(PK, provider);            // registered gatewa
 const gatewaySigner = new ethers.Wallet(enclave.privateKey); // the gateway/KMS signing key
 const execIface = new ethers.Interface(EXEC);
 const gateway = new ethers.Contract(dep.contracts.FhishGateway, GATEWAY, relayer);
+const acl = new ethers.Contract(dep.contracts.FhishACL, ["function isAllowed(bytes32 handle, address account) view returns (bool)"], provider);
 
 // Durable, disk-backed ciphertext store — survives relayer restarts (was in-memory only).
 const STORE_DIR = path.join(ROOT, ".secrets/ct-store");
@@ -112,5 +114,14 @@ app.post("/encrypt-ballot", (req, res) => {
     const handle = ethers.keccak256(ethers.hexlify(ct)); store.set(key(handle), ct); handles.push(handle);
   }
   res.json({ handles });
+});
+// User re-encryption (sealoutput): decrypt a handle and seal it to the user's key, ACL-gated.
+// body: { handle, userPublicKey (uncompressed 0x04…), signature } -> { sealed }. 403 if not ACL-allowed.
+app.post("/reencrypt", async (req, res) => {
+  try {
+    const { handle, userPublicKey, signature } = req.body;
+    const { user, sealed } = await reencryptForUser({ handle, userPublicKey, signature, acl, store, wasm, clientKey });
+    res.json({ user, sealed });
+  } catch (e) { res.status(403).json({ error: e.message }); }
 });
 app.listen(PORT, () => console.log(`[relayer] fhish relayer/coprocessor/gateway on :${PORT}  (holds FHE keys, watches Coston2)`));

@@ -24,7 +24,7 @@ work. No spin — this is the doc to read before claiming parity.
 | **Input proofs (ZKPoK)** | client proves ciphertext well-formedness + plaintext knowledge (`InputVerifier`) | **pass-through** (coprocessor trusts inputs) | 🔴 security |
 | **Threshold KMS committee (M-of-N)** | ✅ | ✅ `ThresholdKMSVerifier` — ≥t distinct operators must sign a decryption; proven 2-of-3 on Coston2 | done |
 | **MPC key-sharing** (no operator ever sees the FHE key) | ✅ (their goal) | ❌ each operator can decrypt; ≥t must *agree* on-chain | 🔴 remaining |
-| **User re-encryption / sealed output** | `sealoutput`/reencrypt to user pubkey — user-only reveal | self-decrypt via ACL, but **not yet reencrypt-to-user-key** | 🟠 privacy |
+| **User re-encryption / sealed output** | ✅ | ✅ `/reencrypt` — decrypt + ECIES-seal to the user's key, ACL-gated; proven allowed→sealed, other→refused | done |
 | **Full type/op coverage** | euint4…256, eaddress, ebytes; all ops | coprocessor materializes **euint32 + max/min/gt/add** | 🟡 breadth |
 | **Persistent coprocessor daemon** | always-on distributed service | **event-driven script** (logic proven, not a daemon) | 🟡 ops |
 | **Production performance** | native `tfhe-rs`, GPU/AES-NI, HCU gas metering | wasm, ~single-digit-second ops | 🟡 perf |
