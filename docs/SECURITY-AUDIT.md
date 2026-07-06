@@ -88,6 +88,26 @@ FXRP escrow** to any address.
   or cap. `recomputeBalances`/`fulfillWithdraw` are commented "kept open for the demo" — must be closed
   before any real deployment.
 
+## Remediation status (fixed + regression-tested)
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| C1 | optional decryption sigs | `fulfillPublicDecryption` **always** verifies; `…NoVerify` deleted | zero-sig & 1-of-3 revert; 2-of-3 passes; backdoor absent |
+| C2 | open `FhishACL.allow` | writes gated to `authorizedApp` (admin-registered) | random EOA self-grant reverts `NotAuthorizedApp`; authorized app works |
+| C3 | open `fulfillWithdraw` | removed; withdrawals settle only via `onWithdraw` (**onlyGateway**), paying the original requester their own decrypted balance | `fulfillWithdraw` absent; `onWithdraw` reverts for non-gateway |
+| H1 | open `recomputeBalances` | **onlyRelayer** on token + FAsset | reverts `only relayer` for attacker |
+| H3 | apps on single-signer gateway | hardened redeploy wires apps to the **2-of-3 threshold** gateway + authorizes them in the ACL | `deploy_secure.ts`, `authorized: true` |
+
+Regression suite: `test/SecurityFixes.test.ts` (9 tests, each reproduces the exploit then proves it's
+blocked). **57/57 total tests pass.**
+
+**Hardened deployment (Coston2, `deployments/coston2.json` → `secure`):** ACL `0x7494…7880`,
+ThresholdKMS(2-of-3) `0xF432…03ba`, Gateway `0x2304…3388`, ConfidentialVoting `0x9B74…c3aB`,
+ConfidentialAuction `0xfb96…4ea3`.
+
+Still open (unchanged, roadmap): **H2** input ZKPoK, **M1** EIP-712 permit, **M2** HKDF-ECIES, plus the
+research-grade **MPC key-sharing**. These do not block the fixed demo but are required for mainnet value.
+
 ## Overall
 
 The **cryptographic core is sound** (real tfhe, deterministic handles, threshold-signature *primitive*,

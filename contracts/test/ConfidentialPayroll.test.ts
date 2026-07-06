@@ -9,6 +9,7 @@ async function stack() {
   const gw = await (await ethers.getContractFactory("FhishGateway")).deploy(employer.address, await kms.getAddress());
   const P = await ethers.getContractFactory("ConfidentialPayroll");
   const p = await P.deploy(await gw.getAddress(), await acl.getAddress(), await cop.getAddress(), await kms.getAddress());
+  await acl.setAuthorizedApp(await p.getAddress(), true); // C2: authorize the app to write the ACL
   return { employer, emp1, emp2, p };
 }
 const h = (v: number) => ethers.zeroPadValue(ethers.toBeHex(v), 32);

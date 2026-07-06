@@ -27,10 +27,17 @@ contract ConfidentialToken is FhishGatewayCaller {
     event BalanceRecomputed(address indexed account, bytes32 newBalanceHandle);
     event BalanceRevealRequested(address indexed account, uint256 decryptionId, bytes32 handle);
 
+    // SECURITY (H1): only the attested relayer may write back recomputed balances.
+    address public relayer;
+
     modifier onlyAdmin() { require(msg.sender == admin, "only admin"); _; }
+    modifier onlyRelayer() { require(msg.sender == relayer, "only relayer"); _; }
+
+    function setRelayer(address r) external onlyAdmin { relayer = r; }
 
     constructor(address gateway, string memory _name, string memory _symbol) FhishGatewayCaller(gateway) {
         admin = msg.sender;
+        relayer = msg.sender;
         name = _name;
         symbol = _symbol;
     }
@@ -49,10 +56,8 @@ contract ConfidentialToken is FhishGatewayCaller {
         emit ConfidentialTransfer(msg.sender, to, amountHandle);
     }
 
-    /// @notice Attested relayer writes back a homomorphically-recomputed balance handle.
-    /// @dev In production this is gated to the attestation-bound relayer; kept open here for the demo
-    ///      flow and asserted off-chain by the coprocessor's signature.
-    function recomputeBalances(address account, bytes32 newBalanceHandle) external {
+    /// @notice Attested relayer writes back a homomorphically-recomputed balance handle. (H1: gated.)
+    function recomputeBalances(address account, bytes32 newBalanceHandle) external onlyRelayer {
         balanceHandle[account] = newBalanceHandle;
         emit BalanceRecomputed(account, newBalanceHandle);
     }

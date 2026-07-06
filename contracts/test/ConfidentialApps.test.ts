@@ -25,6 +25,7 @@ describe("ConfidentialVoting", () => {
     const s = await stack();
     const V = await ethers.getContractFactory("ConfidentialVoting");
     const v = await V.deploy(s.addrs.gw, s.addrs.acl, s.addrs.cop, s.addrs.kms, ["Alice", "Bob", "Carol"]);
+    await s.acl.setAuthorizedApp(await v.getAddress(), true); // C2: authorize the app to write the ACL
     return { ...s, v };
   }
 
@@ -79,6 +80,7 @@ describe("ConfidentialAuction", () => {
     const s = await stack();
     const A = await ethers.getContractFactory("ConfidentialAuction");
     const a = await A.deploy(s.addrs.gw, s.addrs.acl, s.addrs.cop, s.addrs.kms, "Item", 3600, 100n * 10n ** 8n);
+    await s.acl.setAuthorizedApp(await a.getAddress(), true); // C2: authorize the app
     return { ...s, auction: a };
   }
 

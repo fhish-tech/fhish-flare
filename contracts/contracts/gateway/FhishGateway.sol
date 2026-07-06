@@ -144,10 +144,11 @@ contract FhishGateway is IFhishGateway {
         bytes32[] memory handles = publicCtHandles[decryptionId];
         if (handles.length == 0) revert AlreadyFulfilled();
 
-        if (signatures.length > 0) {
-            bool valid = kmsVerifier.verifyDecryptionSignatures(handles, decryptedResult, signatures);
-            if (!valid) revert SignatureVerificationFailed();
-        }
+        // SECURITY (C1): every decryption result MUST be signed by the KMS committee — no exceptions.
+        // (Previously verification was skipped when signatures were empty, letting a lone relayer forge
+        //  results and bypass the M-of-N threshold KMS.)
+        bool valid = kmsVerifier.verifyDecryptionSignatures(handles, decryptedResult, signatures);
+        if (!valid) revert SignatureVerificationFailed();
 
         decryptionDone[decryptionId] = true;
 
@@ -168,15 +169,8 @@ contract FhishGateway is IFhishGateway {
         emit PublicDecryptionResponse(decryptionId, decryptedResult, signatures, "");
     }
 
-    function fulfillPublicDecryptionNoVerify(
-        uint256 decryptionId,
-        bytes calldata decryptedResult
-    ) external onlyRelayer {
-        if (decryptionDone[decryptionId]) revert AlreadyFulfilled();
-
-        decryptionDone[decryptionId] = true;
-        emit PublicDecryptionResponse(decryptionId, decryptedResult, new bytes[](0), "");
-    }
+    // SECURITY (C1): fulfillPublicDecryptionNoVerify removed — it let a relayer post results with no
+    // committee signatures at all. All fulfillment now goes through the signature-verified path above.
 
     function isDecryptionDone(uint256 decryptionId) external view override returns (bool) {
         return decryptionDone[decryptionId];

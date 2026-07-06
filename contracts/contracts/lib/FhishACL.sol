@@ -17,8 +17,15 @@ contract FhishACL {
 
     mapping(address => bool) public persistentAdmins;
 
+    // SECURITY (C2): only authorized FHE app contracts may write the ACL. Previously `allow` was open,
+    // so anyone could grant themselves decrypt rights to any handle and read another user's value.
+    mapping(address => bool) public authorizedApp;
+
     error OnlyAdmin();
     error NotAllowed();
+    error NotAuthorizedApp();
+
+    event AppAuthorized(address indexed app, bool authorized);
 
     constructor(address initialAdmin) {
         persistentAdmins[initialAdmin] = true;
@@ -26,6 +33,11 @@ contract FhishACL {
 
     modifier onlyAdmin() {
         if (!persistentAdmins[msg.sender]) revert OnlyAdmin();
+        _;
+    }
+
+    modifier onlyAuthorizedApp() {
+        if (!authorizedApp[msg.sender]) revert NotAuthorizedApp();
         _;
     }
 
@@ -37,15 +49,21 @@ contract FhishACL {
         persistentAdmins[admin] = false;
     }
 
-    function allowTransient(bytes32 handle, address account) external {
+    /// @notice Authorize (or revoke) an app contract to write the ACL. Called for each app at deploy.
+    function setAuthorizedApp(address app, bool ok) external onlyAdmin {
+        authorizedApp[app] = ok;
+        emit AppAuthorized(app, ok);
+    }
+
+    function allowTransient(bytes32 handle, address account) external onlyAuthorizedApp {
         transientAllowed[handle][account] = 1;
     }
 
-    function allow(bytes32 handle, address account) external {
+    function allow(bytes32 handle, address account) external onlyAuthorizedApp {
         persistentAllowed[handle][account] = true;
     }
 
-    function allowForDecryption(bytes32[] memory handlesList) external {
+    function allowForDecryption(bytes32[] memory handlesList) external onlyAuthorizedApp {
         for (uint256 i = 0; i < handlesList.length; i++) {
             persistentAllowed[handlesList[i]][msg.sender] = true;
         }

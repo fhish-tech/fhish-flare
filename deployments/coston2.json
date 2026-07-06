@@ -39,5 +39,20 @@
       "0x37B8C64151Ce19ad67b068188bA0D22ab8B40a34",
       "0x075747fF539782417e4D58C94aD63EE203F8aADf"
     ]
+  },
+  "secure": {
+    "note": "Post-audit hardened stack: permissioned ACL + 2-of-3 threshold KMS + apps authorized & on the threshold gateway",
+    "FhishACL": "0x7494e596856afb3fA4B483AfA125F0AbAc587880",
+    "FhishCoprocessor": "0x972aD65E9146aA0E4306351e63dacfCf97C9a827",
+    "ThresholdKMSVerifier": "0xF4327270bd8738aEFDcB106d720fFCc7453103ba",
+    "FhishGateway": "0x2304F948cab080f7B8F1F4d6549E0B1c12663388",
+    "threshold": 2,
+    "operators": [
+      "0x5039da861AA6981211B76BcA908114f42A8C1a06",
+      "0x93459047444c8b4eF1828fDa83f363b151F1Cd41",
+      "0xA3e5Ca3ECBd2E9aD98ab909F80a2CF2DA04C396F"
+    ],
+    "ConfidentialVoting": "0x9B74Ee3E7B0186950474E9cE70f79AE45694c3aB",
+    "ConfidentialAuction": "0xfb96DBEFf6D5B8a4501Cd0aC26396F834cc74ea3"
   }
 }

@@ -29,10 +29,22 @@ contract ConfidentialFAsset is FhishGatewayCaller {
     event WithdrawRequested(address indexed account, bytes32 handle);
     event Withdrawn(address indexed account, uint256 amount);
 
-    constructor(address gateway) FhishGatewayCaller(gateway) {
+    // SECURITY (C3/H1): only the attested relayer may recompute balances; withdrawals settle ONLY via
+    // the gateway's verified decryption callback, paying the original requester their own balance.
+    address public relayer;
+    mapping(uint256 => address) public withdrawerOf;
+
+    modifier onlyRelayer() { require(msg.sender == relayer, "only relayer"); _; }
+
+    function setRelayer(address r) external { require(msg.sender == admin, "only admin"); relayer = r; }
+
+    constructor(address gateway, address fxrpOverride) FhishGatewayCaller(gateway) {
         admin = msg.sender;
-        // Resolve FXRP from Flare's registry (getAssetManagerFXRP().fAsset()).
-        fxrp = IERC20(address(ContractRegistry.getAssetManagerFXRP().fAsset()));
+        relayer = msg.sender;
+        // Resolve FXRP from Flare's registry, or use an override (tests / non-Coston2).
+        fxrp = fxrpOverride != address(0)
+            ? IERC20(fxrpOverride)
+            : IERC20(address(ContractRegistry.getAssetManagerFXRP().fAsset()));
     }
 
     /// @notice Deposit FXRP and credit an encrypted balance. `newBalanceHandle` from the coprocessor
@@ -51,28 +63,35 @@ contract ConfidentialFAsset is FhishGatewayCaller {
         emit ConfidentialTransfer(msg.sender, to, amountHandle);
     }
 
-    /// @notice Attested relayer writes back a homomorphically-recomputed balance handle.
-    function recomputeBalances(address account, bytes32 newBalanceHandle) external {
+    /// @notice Attested relayer writes back a homomorphically-recomputed balance handle. (H1: gated.)
+    function recomputeBalances(address account, bytes32 newBalanceHandle) external onlyRelayer {
         balanceHandle[account] = newBalanceHandle;
         emit BalanceRecomputed(account, newBalanceHandle);
     }
 
-    /// @notice Request decryption of the caller's own balance (self-ACL) ahead of withdrawal.
-    function requestWithdrawReveal() external {
+    /// @notice Request withdrawal: the gateway decrypts THIS caller's balance and calls onWithdraw back.
+    function requestWithdraw() external returns (uint256 id) {
         bytes32 h = balanceHandle[msg.sender];
         require(h != bytes32(0), "no balance");
-        bytes32[] memory handles = new bytes32[](1);
-        handles[0] = h;
-        _publicDecryptionRequest(handles, abi.encode(msg.sender));
+        uint256[] memory handles = new uint256[](1);
+        handles[0] = uint256(h);
+        id = _requestDecryption(handles, this.onWithdraw.selector, 0, 0, false);
+        withdrawerOf[id] = msg.sender;   // bind the payout to the requester
         emit WithdrawRequested(msg.sender, h);
     }
 
-    /// @notice After the reveal, the attested relayer settles the withdrawal of the cleartext amount.
-    function fulfillWithdraw(address account, uint256 amount, bytes32 newBalanceHandle) external {
+    /// @notice Gateway callback (C3): only the gateway, after verifying committee signatures, can settle.
+    ///         Pays the ORIGINAL requester exactly their own decrypted balance.
+    function onWithdraw(bytes calldata data) external onlyGateway {
+        (uint256 id, bytes memory result) = abi.decode(data, (uint256, bytes));
+        address who = withdrawerOf[id];
+        require(who != address(0), "unknown request");
+        withdrawerOf[id] = address(0);
+        uint256 amount = uint256(abi.decode(result, (uint32)));
         require(amount <= totalEscrowed, "insufficient escrow");
         totalEscrowed -= amount;
-        balanceHandle[account] = newBalanceHandle;
-        require(fxrp.transfer(account, amount), "payout failed");
-        emit Withdrawn(account, amount);
+        balanceHandle[who] = bytes32(0);
+        require(fxrp.transfer(who, amount), "payout failed");
+        emit Withdrawn(who, amount);
     }
 }

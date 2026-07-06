@@ -36,7 +36,7 @@ async function main() {
   let faAddr = "not-deployed";
   try {
     const FA = await ethers.getContractFactory("ConfidentialFAsset");
-    const fa = await FA.deploy(gateway);
+    const fa = await FA.deploy(gateway, ethers.ZeroAddress);
     await fa.waitForDeployment();
     faAddr = await fa.getAddress();
     console.log(`ConfidentialFAsset ${faAddr}  (fxrp=${await fa.fxrp()})`);

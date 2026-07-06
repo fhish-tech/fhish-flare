@@ -57,13 +57,15 @@ describe("FhishGateway Security", function () {
       expect(await acl.persistentAdmins(stranger.address)).to.be.true;
     });
 
-    it("should allow transient permissions", async function () {
+    it("should allow transient permissions (from an authorized app)", async function () {
+      await acl.connect(admin).setAuthorizedApp(admin.address, true); // authorize the caller (C2)
       const handle = ethers.keccak256(Buffer.from("test"));
       await acl.connect(admin).allowTransient(handle, stranger.address);
       expect(await acl.isAllowed(handle, stranger.address)).to.be.true;
     });
 
-    it("should allow persistent permissions", async function () {
+    it("should allow persistent permissions (from an authorized app)", async function () {
+      await acl.connect(admin).setAuthorizedApp(admin.address, true); // authorize the caller (C2)
       const handle = ethers.keccak256(Buffer.from("test2"));
       await acl.connect(admin).allow(handle, stranger.address);
       expect(await acl.isAllowed(handle, stranger.address)).to.be.true;
