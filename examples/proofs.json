@@ -1,0 +1,12 @@
+{
+  "network": "coston2",
+  "ts": "2026-07-05",
+  "txs": {
+    "auctionBid1": "https://coston2-explorer.flare.network/tx/0x3949868d425e3d19e73d35f33644d98f28904ae812e00b90fd8e8090f27a305c",
+    "auctionBid2": "https://coston2-explorer.flare.network/tx/0x9e248c1d1c6d19aa17fa39362a3ca35e49c9479decdd6adfb421bd168897e0c5",
+    "tokenMint": "https://coston2-explorer.flare.network/tx/0xdd0b7e6f7511d7ca31a2154561c123c8701a1d4ead90b86beac806485c4c4b79",
+    "tokenTransfer": "https://coston2-explorer.flare.network/tx/0x6dc635a9317f379c83fd2ca1c4751e2ed86aac097aa84a499a875e4b937034df"
+  },
+  "ftsoFlrUsd": "0.00704064",
+  "auctionBidCount": 2
+}

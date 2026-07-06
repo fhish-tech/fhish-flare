@@ -1,0 +1,29 @@
+{
+  "network": "coston2",
+  "chainId": 114,
+  "rpc": "https://coston2-api.flare.network/ext/C/rpc",
+  "explorer": "https://coston2-explorer.flare.network",
+  "deployer": "0xcB0E9b163ED920398f301f289a11922dAB704941",
+  "milestone": "M0/M2 full stack + AttestationRegistry (enclave-bound key, SIM attestation)",
+  "contracts": {
+    "FhishACL": "0x99675be6298073935828fDE3D73bFB88A885A400",
+    "FhishKMSVerifier": "0x2318DAf8c4A75a0ff326217c52ef0FE7db39b5e3",
+    "FhishGateway": "0xA5756A29FFe85cB891a1C60fE7FAFcDd8746C039",
+    "AttestationRegistry": "0x9a94dd884353a1Bab7a944bA7f4Fe23FA04B4F10",
+    "PrivateVotingV2": "0x3F561ae7aEdfdf7cc9e97eE9CaeeC628e7Ca62B2"
+  },
+  "attestation": {
+    "mode": "sim",
+    "enclaveSigningKey": "0xc7C7F8Fe62d8261905342dDa3708c1D52Af1Af88",
+    "measurement": "0x9e0ec452532afc2d1bdf5b0a6f4bbe11449879d310c37acaa09b137c9f00f427",
+    "gatewaySignerBound": "0xc7C7F8Fe62d8261905342dDa3708c1D52Af1Af88",
+    "hardenedSetSigner": true
+  },
+  "apps": {
+    "SealedBidAuction": "0x2123313800f37fa2Fc9D672D5126Da8Ac6375C1D",
+    "ConfidentialToken": "0x33AfEA1582e143D47C391cbE7F59a84e40f5A619",
+    "ConfidentialFAsset": "0x6c8EE727F5613545CcdAF8905683EB5229a706b9",
+    "PrivateVotingV2": "0x3F561ae7aEdfdf7cc9e97eE9CaeeC628e7Ca62B2",
+    "DecryptionConsumer": "0xAA35738649c9635275C17dE81512a082000Cb458"
+  }
+}

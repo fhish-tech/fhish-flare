@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FHISH Shortint Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+    h1 { color: #4fc3f7; }
+    .result { margin: 10px 0; padding: 10px; background: #2d2d2d; border-radius: 4px; }
+    .success { color: #81c784; }
+    .error { color: #e57373; }
+    pre { background: #2d2d2d; padding: 10px; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>FHISH Shortint Ciphertext Size Test</h1>
+  <div id="output"></div>
+  <script type="module">
+    import init, {
+      FhisShortintConfig,
+      FhisShortintClientKey,
+      FhisShortintPublicKey,
+      FhisShortintServerKey,
+      FhisShortintUint2,
+      FhisConfig,
+      FhisClientKey,
+      FhisCompactPublicKey,
+      FhisUint32,
+    } from "./pkg/fhish_wasm.js";
+
+    const output = document.getElementById('output');
+    
+    function log(msg, isSuccess = null) {
+      const div = document.createElement('div');
+      div.className = 'result' + (isSuccess === true ? ' success' : isSuccess === false ? ' error' : '');
+      div.textContent = msg;
+      output.appendChild(div);
+    }
+
+    try {
+      await init();
+      log("WASM initialized successfully ✓");
+
+      const iterations = 5;
+
+      log("--- Shortint (PARAM_MESSAGE_2_CARRY_2_KS_PBS) ---");
+      const shortintConfig = new FhisShortintConfig();
+      const shortintClientKey = new FhisShortintClientKey(shortintConfig);
+      const shortintPublicKey = new FhisShortintPublicKey(shortintClientKey);
+      const shortintServerKey = new FhisShortintServerKey(shortintClientKey);
+
+      let shortintTotalSize = 0;
+      for (let i = 0; i < iterations; i++) {
+        const ct = FhisShortintUint2.encrypt(1, shortintPublicKey);
+        const serialized = ct.serialize();
+        shortintTotalSize += serialized.length;
+      }
+      const shortintAvgSize = shortintTotalSize / iterations;
+      log(`Average ciphertext size: ${shortintAvgSize.toFixed(0)} bytes (${(shortintAvgSize/1024).toFixed(2)} KB)`);
+
+      const ct1 = FhisShortintUint2.encrypt(1, shortintPublicKey);
+      const ct2 = FhisShortintUint2.encrypt(2, shortintPublicKey);
+      const ctResult = shortintServerKey.add(ct1, ct2);
+      const decrypted = ctResult.decrypt(shortintClientKey);
+      log(`Addition test: 1 + 2 = ${decrypted} ${decrypted === 3 ? "✓" : "✗"}`, decrypted === 3);
+
+      log("--- FheUint32 (radix representation) ---");
+      const config = new FhisConfig();
+      const clientKey = new FhisClientKey(config);
+      const publicKey = new FhisCompactPublicKey(clientKey);
+
+      let uint32TotalSize = 0;
+      for (let i = 0; i < iterations; i++) {
+        const ct = FhisUint32.encrypt(1, publicKey);
+        const serialized = ct.serialize();
+        uint32TotalSize += serialized.length;
+      }
+      const uint32AvgSize = uint32TotalSize / iterations;
+      log(`Average ciphertext size: ${uint32AvgSize.toFixed(0)} bytes (${(uint32AvgSize/1024).toFixed(2)} KB)`);
+
+      log("=== Summary ===");
+      log(`Shortint: ${shortintAvgSize.toFixed(0)} bytes`);
+      log(`FheUint32: ${uint32AvgSize.toFixed(0)} bytes`);
+      log(`Ratio: ${(uint32AvgSize / shortintAvgSize).toFixed(1)}x smaller with shortint`);
+
+      const percentReduction = ((1 - shortintAvgSize/uint32AvgSize) * 100).toFixed(1);
+      log(`Size reduction: ${percentReduction}%`);
+      
+    } catch (e) {
+      log(`Error: ${e.message}`, false);
+      console.error(e);
+    }
+  </script>
+</body>
+</html>

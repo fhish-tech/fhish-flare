@@ -1,0 +1,11 @@
+.secrets/
+node_modules/
+out/
+cache/
+artifacts/
+target/
+.env
+.env.*
+*.log
+broadcast/
+*.b64

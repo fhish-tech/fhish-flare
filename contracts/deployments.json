@@ -1,0 +1,17 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployedAt": "2026-04-09T00:00:00Z",
+  "contracts": {
+    "FhishACL": "0x395162aD6752ed2B0E20CB5B302a302e9a117208",
+    "FhishKMSVerifier": "0xF88371B05B0f78CcAd8327855D1B2690A517E287",
+    "FhishGateway": "0x177B49Efced0910F491A35ED37B6E761Ddb80DA4",
+    "PrivateVotingV2": "0x6AF43958535Fd7ECb993630d84681a38DE86913d",
+    "FhishCoprocessor": "0x687408aB54661ba0b4aeF3a44156c616c6955E07"
+  },
+  "relayers": [
+    "0x0121Cb33BdAeEb8f400b27c0D5f3C7916C77F453"
+  ],
+  "gatewaySigner": "0x0121Cb33BdAeEb8f400b27c0D5f3C7916C77F453",
+  "deployer": "0x0121Cb33BdAeEb8f400b27c0D5f3C7916C77F453"
+}

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Hardhat
+artifacts/
+cache/
+typechain-types/
+broadcast/
+deployments/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Test artifacts
+debug_output.txt
+balance_check.txt
+deploy_error.txt
+verify_output.txt
+*.test-output.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
