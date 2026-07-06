@@ -1,0 +1,61 @@
+---
+title: Architecture & Relayer
+description: The fhish coprocessor, the threshold KMS committee, where the relayer runs, and the honest roadmap.
+---
+
+# Architecture & the Relayer
+
+## The three parts
+
+| Part | Runs | Role |
+|---|---|---|
+| **Contracts** | on-chain (Flare) | `FHE.sol`, `FhishCoprocessor` (symbolic executor), `FhishACL`, `FhishGateway`, `ThresholdKMSVerifier`, your apps |
+| **Relayer / coprocessor** | **off-chain server** | holds FHE keys, watches Coston2, materializes real ciphertexts, fulfills decryptions |
+| **Frontend** | any static host | encrypt inputs, send tx, read results |
+
+## Where the relayer runs
+
+The relayer (`relayer-daemon.mjs`) is an ordinary **Node process** — your laptop for dev, a small VM or
+container in production. The blockchain does not run it. It:
+
+1. polls Coston2 for the `FheOp`/`VerifyInput` op graph and **materializes** the real `tfhe-rs` ciphertext
+   for each handle into a **durable disk-backed store**,
+2. watches for `PublicDecryptionRequest` events and **fulfills** them (decrypt → collect committee
+   signatures → post on-chain).
+
+It's the trusted component — which is why decryption authorization is a **committee**, not one key.
+
+## Threshold KMS (M-of-N)
+
+`ThresholdKMSVerifier` accepts a decryption result only if **≥ threshold distinct authorized operators**
+signed it. No single operator can forge a fulfillment on-chain.
+
+```solidity
+function verifyDecryptionSignatures(bytes32[] handles, bytes result, bytes[] sigs)
+    returns (bool);   // true iff >= threshold distinct committee signers signed
+```
+
+Proven on Coston2: a 2-of-3 committee — **1 signature is rejected, 2 are accepted**.
+
+## Data flow
+
+```
+encrypt(v) ──▶ contract call (handle) ──▶ FhishCoprocessor emits FheOp/VerifyInput
+                                                     │
+                    relayer materializes real tfhe ◀─┘
+close()/reveal ──▶ PublicDecryptionRequest ──▶ relayer decrypts ──▶ committee signs (M-of-N)
+                                                     │
+                              gateway verifies sigs, calls your callback ◀─┘
+```
+
+## Honest roadmap
+
+| Done | Roadmap |
+|---|---|
+| ✅ On-chain FHE + real coprocessor | 🔜 MPC key-sharing so no operator ever sees the FHE secret key (true threshold-FHE) |
+| ✅ Private client-encrypted inputs | 🔜 Full zero-knowledge input proofs (ZKPoK of plaintext knowledge) |
+| ✅ Selective + ACL-gated decryption | 🔜 User re-encryption (`sealoutput` to the user's key) |
+| ✅ **M-of-N threshold KMS committee** | 🔜 native `tfhe-rs` perf, browser-side encryption, audits |
+
+These last items are the same frontier Zama is still hardening for their mainnet — fhish is honest about
+where the trusted boundary is today.

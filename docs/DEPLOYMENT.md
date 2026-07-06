@@ -32,7 +32,8 @@ real blockers between here and "production-grade like Zama."
 
 | Blocker | Why it matters | Effort |
 |---|---|---|
-| 🔴 **Single trusted gateway key** | one server can decrypt everything — not acceptable for real value. Need **threshold/MPC KMS** (n-party decryption). | large (integrate a threshold FHE KMS) |
+| ✅ **Threshold KMS committee (M-of-N)** | DONE — `ThresholdKMSVerifier`: no single operator can authorize a decryption on-chain (proven 2-of-3 on Coston2). | shipped |
+| 🔴 **MPC key-sharing** | each operator can still decrypt off-chain; ≥t must *agree* on-chain. True threshold-FHE (no operator ever sees the key) is the remaining depth. | large (research-grade) |
 | 🔴 **Input proofs (ZKPoK)** | without them a malicious client can submit malformed ciphertexts / lie about a handle. Need Zama-style `InputVerifier` ZK proofs. | large (research-grade) |
 | 🟠 **In-memory ciphertext store** | relayer restart loses state. | small (Postgres/S3-backed store) |
 | 🟠 **Performance** | wasm tfhe ops ~seconds; server key is 120 MB. Need native `tfhe-rs` build (AES-NI/GPU) + a job queue. | medium |

@@ -28,5 +28,16 @@
     "DecryptionConsumer": "0xAA35738649c9635275C17dE81512a082000Cb458",
     "ConfidentialAuction": "0x04FAb1Dc38bC97Ed7a305dc940d9CcED91056Fdb",
     "ConfidentialVoting": "0xce1080027BCa9718Ab7B002049dE64241E6eE8eE"
+  },
+  "threshold": {
+    "ThresholdKMSVerifier": "0xA27BEFC7B3640a8A900C1Db14DF094Bf0Dfb3a7f",
+    "FhishGateway": "0x35867DAa3A838F0595696B8D2CE63f130ed1e099",
+    "DecryptionConsumer": "0xBaD114f1Eb1bAa95806395AC43AA2df5C478BF64",
+    "threshold": 2,
+    "operators": [
+      "0x5bd5efE4f0609784298C81Bb32A6bAAb9485E629",
+      "0x37B8C64151Ce19ad67b068188bA0D22ab8B40a34",
+      "0x075747fF539782417e4D58C94aD63EE203F8aADf"
+    ]
   }
 }

@@ -39,7 +39,18 @@ const gatewaySigner = new ethers.Wallet(enclave.privateKey); // the gateway/KMS 
 const execIface = new ethers.Interface(EXEC);
 const gateway = new ethers.Contract(dep.contracts.FhishGateway, GATEWAY, relayer);
 
-const store = new Map(); const key = (h) => h.toLowerCase();
+// Durable, disk-backed ciphertext store — survives relayer restarts (was in-memory only).
+const STORE_DIR = path.join(ROOT, ".secrets/ct-store");
+fs.mkdirSync(STORE_DIR, { recursive: true });
+const mem = new Map();
+const fileFor = (h) => path.join(STORE_DIR, `${h.toLowerCase().replace("0x", "")}.bin`);
+const store = {
+  set(h, bytes) { mem.set(h.toLowerCase(), bytes); try { fs.writeFileSync(fileFor(h), Buffer.from(bytes)); } catch {} },
+  get(h) { const k = h.toLowerCase(); if (mem.has(k)) return mem.get(k); try { const b = fs.readFileSync(fileFor(h)); const u = new Uint8Array(b); mem.set(k, u); return u; } catch { return undefined; } },
+  has(h) { return mem.has(h.toLowerCase()) || fs.existsSync(fileFor(h)); },
+  get size() { try { return fs.readdirSync(STORE_DIR).length; } catch { return mem.size; } },
+};
+const key = (h) => h.toLowerCase();
 const apply = (op, a, b) => op === 20 ? a.max(b) : op === 19 ? a.min(b) : op === 1 ? a.add(b)
   : op === 2 ? a.sub(b) : op === 16 ? a.gt(b) : op === 18 ? a.lt(b) : null;
 

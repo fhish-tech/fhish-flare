@@ -1,0 +1,67 @@
+---
+title: The FHE Library
+description: The FHE.sol Solidity API — encrypted types, operations, inputs, and access control.
+---
+
+# The `FHE` Library
+
+`import "fhish-flare/contracts/lib/FHE.sol";` gives you the developer-facing API. It mirrors Zama's
+`FHE`/`TFHE` so fhEVM/Fhenix developers are immediately productive.
+
+## Encrypted types
+
+| Type | Meaning |
+|---|---|
+| `euint32` | encrypted 32-bit unsigned integer (a 32-byte handle) |
+| `ebool` | encrypted boolean |
+| `externalEuint32` | a client-encrypted input handle (from the SDK), bound via `FHE.fromExternal` |
+
+All are 32-byte handles under the hood — no plaintext is ever stored.
+
+## Inputs
+
+```solidity
+// Bind a client-encrypted input (+ proof) into a usable euint32.
+euint32 v = FHE.fromExternal(encV, proof);
+
+// Trivially encrypt a PUBLIC value (no privacy — the value is visible on-chain).
+euint32 fee = FHE.asEuint32(100);
+```
+
+## Operations
+
+```solidity
+euint32 c = FHE.add(a, b);   // sub, mul, min, max
+ebool   p = FHE.gt(a, b);    // lt, le, ge, eq, ne
+euint32 w = FHE.select(p, a, b);  // if p then a else b (branchless)
+```
+
+Every op runs **homomorphically off-chain**; on-chain it only records the operation over handles.
+
+## Access control (ACL)
+
+A handle can only be decrypted by addresses it's been `allow`-ed to. Grant access explicitly:
+
+```solidity
+FHE.allowThis(result);            // this contract may use/decrypt it later
+FHE.allow(result, msg.sender);    // the caller may decrypt it (e.g. their own balance)
+bool ok = FHE.isSenderAllowed(x); // check
+```
+
+Without an `allow`, the gateway refuses to decrypt — this is what keeps one user's value private from
+another.
+
+## Wiring (once per contract)
+
+Each contract records the coprocessor addresses in its own storage (like Zama's `FHEVMConfig`):
+
+```solidity
+constructor(address acl, address executor, address kms) {
+    FHE.setCoprocessor(FhishConfigStruct({
+        ACLAddress: acl, FhishExecutorAddress: executor,
+        KMSVerifierAddress: kms, InputVerifierAddress: address(0)
+    }));
+}
+```
+
+Next: [Writing a confidential app →](/04-writing-a-confidential-app)

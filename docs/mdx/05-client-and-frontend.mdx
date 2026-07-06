@@ -1,0 +1,57 @@
+---
+title: Client & Frontend
+description: Encrypt inputs, submit transactions, and build a RainbowKit dApp with fhish.
+---
+
+# Client & Frontend
+
+Users interact with a confidential app by **encrypting inputs**, sending a transaction, and later reading
+**decrypted results**. The relayer exposes a small HTTP API for encryption.
+
+## Relayer API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | `{ ok, block, storeSize }` |
+| `GET /public-key` | the FHE compact public key (hex) for client-side encryption |
+| `POST /encrypt` | `{ value }` → `{ handle }` — encrypt one `euint32` |
+| `POST /encrypt-ballot` | `{ choice, n }` → `{ handles }` — a one-hot ballot |
+
+## Casting a confidential vote (RainbowKit + wagmi)
+
+```tsx
+import { useWriteContract } from "wagmi";
+const { writeContractAsync } = useWriteContract();
+
+async function vote(choice: number, n: number) {
+  // 1. get encrypted ballot handles from the relayer
+  const { handles } = await fetch(`${RELAYER_URL}/encrypt-ballot`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ choice, n }),
+  }).then(r => r.json());
+
+  // 2. submit the on-chain transaction — only handles touch the chain
+  await writeContractAsync({
+    address: VOTING_ADDRESS, abi: VOTING_ABI,
+    functionName: "vote", args: [handles, "0x"],
+  });
+}
+```
+
+Add Coston2 as a viem chain and wrap the app in RainbowKit's providers — see the full working dApp in
+[`fhish-voting-flare`](https://github.com/fhish-tech/fhish-voting-flare).
+
+## Reading results
+
+```tsx
+const results = useReadContract({ address: VOTING_ADDRESS, abi: VOTING_ABI, functionName: "getResults" });
+```
+
+## Where encryption happens
+
+- **Today (demo):** the relayer encrypts (it holds the FHE key and can decrypt anyway, so this matches the
+  threshold-gateway trust model — a vote is hidden from the chain and from other voters).
+- **Production:** encrypt **client-side in the browser** with a fhish-wasm web build so the relayer never
+  sees the plaintext. This is on the roadmap.
+
+Next: [Architecture & the relayer →](/06-architecture-and-relayer)

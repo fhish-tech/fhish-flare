@@ -1,0 +1,59 @@
+---
+title: Introduction
+description: What fhish is — Fully Homomorphic Encryption for confidential smart contracts on Flare.
+---
+
+# fhish — Confidential Smart Contracts for Flare
+
+**fhish** brings **Fully Homomorphic Encryption (FHE)** to [Flare](https://flare.network), in the
+lineage of [Zama's fhEVM](https://docs.zama.ai/fhevm) and [Fhenix](https://www.fhenix.io/). You write
+ordinary Solidity against an encrypted type system — `euint32`, `ebool` — and get **encrypted on-chain
+state**: values that are computed on while encrypted and never revealed unless you choose to.
+
+```solidity
+using FHE for euint32;
+
+euint32 bid = FHE.fromExternal(encBid, proof); // a private, client-encrypted input
+highestBid = FHE.max(highestBid, bid);          // homomorphic — no plaintext ever on-chain
+FHE.allow(highestBid, msg.sender);              // ACL: who may decrypt
+```
+
+## Why FHE
+
+Public blockchains are transparent by default — every balance, bid, and vote is visible. FHE lets many
+parties **compute over encrypted data** (`add`, `compare`, `select`, arbitrary functions) so applications
+can be **confidential and composable at the same time**: sealed-bid auctions, private voting, confidential
+tokens, private DeFi over real assets.
+
+## How it works (the coprocessor model)
+
+An EVM cannot run FHE math directly, so fhish splits the work — exactly like fhEVM:
+
+1. **On-chain (`FHE.sol` + `FhishCoprocessor`)** — encrypted values are 32-byte **handles**. Each FHE op
+   derives a deterministic, typed handle and emits an event describing the computation. No plaintext, no
+   FHE math on-chain.
+2. **Off-chain coprocessor** — watches those events and materializes the **real Zama `tfhe-rs` ciphertext**
+   for each handle, performing the homomorphic math.
+3. **Threshold KMS / gateway** — decrypts a handle only when an **M-of-N committee** of operators agrees,
+   and only for **ACL-authorized** callers.
+
+```
+Solidity (FHE.max) ── emits op graph ──▶ Coprocessor (real tfhe) ──▶ Threshold KMS (M-of-N decrypt)
+        │                                                                      │
+        └────────────────────── 32-byte handles on-chain ─────────────────────┘
+```
+
+## Flare integration
+
+Confidential apps read Flare's enshrined data — **FTSOv2** price feeds and **FAssets (FXRP)** — so you can
+build *confidential DeFi over real Flare data* (e.g. an auction whose reserve is a live FLR/USD price).
+
+## Honest trust model
+
+- **Decryption is M-of-N** (threshold KMS) — no single operator can authorize a decryption on-chain.
+- **What's real:** the homomorphic math (Zama `tfhe-rs`), the symbolic handle graph, the on-chain ACL,
+  private client-encrypted inputs, and selective decryption.
+- **Roadmap (honest, same frontier Zama is hardening):** MPC key-sharing so no operator ever sees the FHE
+  secret key, and full zero-knowledge input proofs (ZKPoK). See [Architecture](/06-architecture-and-relayer).
+
+Next: [Getting started →](/02-getting-started)

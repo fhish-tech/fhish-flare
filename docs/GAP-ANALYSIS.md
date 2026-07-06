@@ -22,7 +22,8 @@ work. No spin — this is the doc to read before claiming parity.
 | Gap | Zama/Fhenix | fhish today | Severity |
 |---|---|---|---|
 | **Input proofs (ZKPoK)** | client proves ciphertext well-formedness + plaintext knowledge (`InputVerifier`) | **pass-through** (coprocessor trusts inputs) | 🔴 security |
-| **Threshold / MPC KMS** | decryption split across an *n*-party network; no single key | **single trusted gateway key** (same as Zama *testnet*) | 🔴 decentralization |
+| **Threshold KMS committee (M-of-N)** | ✅ | ✅ `ThresholdKMSVerifier` — ≥t distinct operators must sign a decryption; proven 2-of-3 on Coston2 | done |
+| **MPC key-sharing** (no operator ever sees the FHE key) | ✅ (their goal) | ❌ each operator can decrypt; ≥t must *agree* on-chain | 🔴 remaining |
 | **User re-encryption / sealed output** | `sealoutput`/reencrypt to user pubkey — user-only reveal | self-decrypt via ACL, but **not yet reencrypt-to-user-key** | 🟠 privacy |
 | **Full type/op coverage** | euint4…256, eaddress, ebytes; all ops | coprocessor materializes **euint32 + max/min/gt/add** | 🟡 breadth |
 | **Persistent coprocessor daemon** | always-on distributed service | **event-driven script** (logic proven, not a daemon) | 🟡 ops |

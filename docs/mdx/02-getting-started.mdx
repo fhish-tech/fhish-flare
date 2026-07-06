@@ -1,0 +1,65 @@
+---
+title: Getting Started
+description: Install fhish, compile, test, and deploy your first confidential contract on Flare Coston2.
+---
+
+# Getting Started
+
+## Prerequisites
+
+- **Node 20+**, **Foundry** (`cast`), and a Coston2-funded key (get free C2FLR at
+  [faucet.flare.network](https://faucet.flare.network)).
+- Coston2: chainId **114**, RPC `https://coston2-api.flare.network/ext/C/rpc`.
+
+## Install & test
+
+```bash
+git clone https://github.com/fhish-tech/fhish-flare && cd fhish-flare/contracts
+npm install
+npx hardhat compile
+npx hardhat test          # unit tests (FHE ops, apps, threshold KMS, ACL)
+```
+
+Set your deployer key in `contracts/.env`:
+
+```bash
+PRIVATE_KEY=0x<your-coston2-funded-key>
+COSTON2_RPC_URL=https://coston2-api.flare.network/ext/C/rpc
+```
+
+## Deploy the protocol
+
+```bash
+# core: ACL + KMS + gateway + symbolic coprocessor executor
+npx hardhat run scripts/deploy_coston2.ts --network coston2
+npx hardhat run scripts/wire_fhe.ts       --network coston2   # deploy + wire the FHE executor
+
+# a 2-of-3 threshold KMS committee + gateway
+npx hardhat run scripts/deploy_threshold.ts --network coston2
+
+# apps
+npx hardhat run scripts/deploy_voting.ts  --network coston2
+npx hardhat run scripts/deploy_apps.ts    --network coston2
+```
+
+Addresses are written to `deployments/coston2.json`.
+
+## Run the coprocessor / relayer
+
+The relayer is an **off-chain** service that holds the FHE keys, watches Coston2, materializes ciphertexts,
+and fulfills decryptions. On your machine for dev; a small VM/container in prod.
+
+```bash
+cd ../offchain/gateway
+node --import ./src/polyfill.mjs relayer-daemon.mjs     # serves :8090
+```
+
+## Prove it works (real FHE, end-to-end)
+
+```bash
+node --import ./src/polyfill.mjs confidential-auction-e2e.mjs   # private bids -> homomorphic max
+node --import ./src/polyfill.mjs voting-e2e.mjs                 # encrypted ballots -> tally
+node --import ./src/polyfill.mjs threshold-e2e.mjs             # 2-of-3 decryption
+```
+
+Next: [The FHE library →](/03-fhe-library)

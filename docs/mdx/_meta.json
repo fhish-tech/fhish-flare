@@ -1,0 +1,8 @@
+{
+  "01-introduction": "Introduction",
+  "02-getting-started": "Getting Started",
+  "03-fhe-library": "The FHE Library",
+  "04-writing-a-confidential-app": "Writing a Confidential App",
+  "05-client-and-frontend": "Client & Frontend",
+  "06-architecture-and-relayer": "Architecture & Relayer"
+}

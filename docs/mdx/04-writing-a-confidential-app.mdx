@@ -1,0 +1,73 @@
+---
+title: Writing a Confidential App
+description: Build a confidential voting contract with fhish end-to-end — contract, decryption, and results.
+---
+
+# Writing a Confidential App
+
+We'll build **confidential voting**: encrypted ballots, a homomorphic tally, and a reveal of only the
+aggregate totals. (This is `ConfidentialVoting.sol` in the examples.)
+
+## 1. The contract
+
+```solidity
+import "fhish-flare/contracts/lib/FHE.sol";
+import "fhish-flare/contracts/gateway/FhishGatewayCaller.sol";
+
+contract ConfidentialVoting is FhishGatewayCaller {
+    using FHE for euint32;
+    string[] public candidates;
+    mapping(uint256 => euint32) private tally;   // encrypted tally per candidate
+    bool private initialized;
+    uint32[] public results;
+
+    constructor(address gw, address acl, address exec, address kms, string[] memory c)
+        FhishGatewayCaller(gw)
+    {
+        candidates = c;
+        FHE.setCoprocessor(FhishConfigStruct(acl, exec, kms, address(0)));
+    }
+
+    // A ballot is one encrypted value per candidate (a one-hot 1/0 vector).
+    function vote(externalEuint32[] calldata encVotes, bytes calldata proof) external {
+        for (uint256 i = 0; i < encVotes.length; i++) {
+            euint32 v = FHE.fromExternal(encVotes[i], proof);
+            tally[i] = initialized ? FHE.add(tally[i], v) : v;  // homomorphic tally
+            FHE.allowThis(tally[i]);
+        }
+        initialized = true;
+    }
+
+    // Ask the threshold KMS to decrypt ONLY the aggregate tallies.
+    function close() external {
+        uint256[] memory h = new uint256[](candidates.length);
+        for (uint256 i = 0; i < candidates.length; i++) h[i] = uint256(FHE.toBytes32(tally[i]));
+        _requestDecryption(h, this.fulfillResults.selector, 0, 0, false);
+    }
+
+    function fulfillResults(bytes calldata data) external onlyGateway {
+        (, bytes memory r) = abi.decode(data, (uint256, bytes));
+        results = abi.decode(r, (uint32[]));   // the revealed totals
+    }
+}
+```
+
+## 2. The flow
+
+1. Each voter's client encrypts a one-hot ballot and uploads the ciphertexts (see [Client & Frontend](/05-client-and-frontend)).
+2. `vote(handles, proof)` records the encrypted ballot; the coprocessor homomorphically adds it to each tally.
+3. `close()` requests decryption; the relayer decrypts the tallies and the **threshold KMS committee**
+   signs the result; `fulfillResults` posts the totals.
+4. Individual ballots are **never** revealed — only the sums.
+
+## Key patterns
+
+- **Selective reveal:** decrypt only the aggregate (`tally`), never the inputs.
+- **ACL:** `FHE.allow(bid, msg.sender)` lets a user decrypt their *own* value; nothing else.
+- **Async decryption:** `_requestDecryption(handles, callback, …)` → the gateway calls your callback when
+  the committee has signed.
+
+Try it: `ConfidentialAuction.sol` (homomorphic `max` + FTSO reserve) and `ConfidentialPayroll.sol`
+(homomorphic sum) follow the same shape.
+
+Next: [Client & frontend →](/05-client-and-frontend)
