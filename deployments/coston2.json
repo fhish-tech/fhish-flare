@@ -10,7 +10,8 @@
     "FhishKMSVerifier": "0x2318DAf8c4A75a0ff326217c52ef0FE7db39b5e3",
     "FhishGateway": "0xA5756A29FFe85cB891a1C60fE7FAFcDd8746C039",
     "AttestationRegistry": "0x9a94dd884353a1Bab7a944bA7f4Fe23FA04B4F10",
-    "PrivateVotingV2": "0x3F561ae7aEdfdf7cc9e97eE9CaeeC628e7Ca62B2"
+    "PrivateVotingV2": "0x3F561ae7aEdfdf7cc9e97eE9CaeeC628e7Ca62B2",
+    "FhishCoprocessor": "0x978F7298Ae2ac2fB4Ba1a3D4C05f6bbAb3B49291"
   },
   "attestation": {
     "mode": "sim",

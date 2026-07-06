@@ -3,305 +3,111 @@ pragma solidity ^0.8.24;
 
 import {FhishType} from "./FhishType.sol";
 import "./IFhishCoprocessor.sol";
-import "./FhishImpl.sol";
 
 /**
- * @title FhishCoprocessor — Custom FHE Coprocessor
- * @notice Delegates FHE operations to the Zama FHEVM precompile on Sepolia.
- *         This contract wraps the precompile with our own access control,
- *         ciphertext verification, and management interface.
+ * @title FhishCoprocessor — symbolic FHE executor for Flare
+ * @notice The on-chain half of the fhish/fhEVM coprocessor model. It performs NO FHE math on-chain
+ *         (an EVM can't). Instead each op derives a deterministic, typed 32-byte *handle* and emits an
+ *         `FheOp` / `TrivialEncrypt` / `VerifyInput` event. An off-chain coprocessor watches those
+ *         events and materializes the REAL Zama tfhe ciphertext for each result handle; the gateway
+ *         decrypts under ACL. This is exactly how Zama fhEVM and Fhenix work — the chain tracks the
+ *         computation graph over handles, the ciphertexts live off-chain.
  *
- *         For production, replace the precompile calls with a self-hosted
- *         FHE coprocessor running tfhe-rs with AES-NI or GPU acceleration.
- *
- * @dev Zama FHEVM precompile address on Sepolia: 0x687408aB54661ba0b4aeF3a44156c616c6955E07
- *      Known from _references/zama/fhevm-solidity/config/FHEVMConfig.sol
- *
- *      The precompile's addCiphertextMaterial selector: 0x90f30354
- *      Signature: addCiphertextMaterial(bytes32,uint256,bytes32,bytes32)
- *      - ctHandle: keccak256(ciphertext) — must match what gateway uses
- *      - keyId: 1 (default network key)
- *      - ciphertextDigest: keccak256(ciphertext)
- *      - snsCiphertextDigest: keccak256(keccak256(ciphertext)) (SNS format digest)
+ *         Result handle layout: keccak256(op‖operands)[0..30] ‖ typeByte(31). The type byte lets the
+ *         off-chain coprocessor know how to interpret/decrypt each handle. Deterministic ⇒ the same
+ *         computation always yields the same handle, so the graph is reproducible and verifiable.
  */
 contract FhishCoprocessor is IFhishCoprocessor {
-    address private constant FHEVM_PRECOMPILE = address(0x687408aB54661ba0b4aeF3a44156c616c6955E07);
-    bytes4 private constant ADD_CIPHERTEXT_MATERIAL_SELECTOR = bytes4(0x90f30354);
+    // opcodes
+    uint8 constant ADD=1; uint8 constant SUB=2; uint8 constant MUL=3; uint8 constant DIV=4; uint8 constant REM=5;
+    uint8 constant AND=6; uint8 constant OR=7; uint8 constant XOR=8; uint8 constant SHL=9; uint8 constant SHR=10;
+    uint8 constant ROTL=11; uint8 constant ROTR=12; uint8 constant EQ=13; uint8 constant NE=14; uint8 constant GE=15;
+    uint8 constant GT=16; uint8 constant LE=17; uint8 constant LT=18; uint8 constant MIN=19; uint8 constant MAX=20;
+    uint8 constant NEG=21; uint8 constant NOT=22; uint8 constant SELECT=23; uint8 constant CAST=24; uint8 constant RAND=27;
 
-    error CoprocessorCallFailed(string reason);
-    error InvalidCiphertextType();
-    error CiphertextImportFailed();
+    /// @notice A homomorphic op the off-chain coprocessor must materialize.
+    event FheOp(uint8 indexed op, bytes32 result, bytes32 lhs, bytes32 rhs, bytes1 scalarByte, uint8 resultType);
+    event TrivialEncrypt(bytes32 result, uint256 value, uint8 toType);
+    event VerifyInput(bytes32 result, bytes32 inputHandle, address caller, uint8 inputType);
+    event Cast(bytes32 result, bytes32 ct, uint8 toType);
+    event Rand(bytes32 result, uint256 upperBound, uint8 randType);
 
-    modifier onlyAllowed(bytes32 handle, address caller) {
-        _;
+    // ---- handle helpers ----
+    function _typeOf(bytes32 h) internal pure returns (uint8) { return uint8(uint256(h)); }
+    function _make(bytes memory pre, uint8 ftype) internal pure returns (bytes32) {
+        bytes32 h = keccak256(pre);
+        return bytes32((uint256(h) & ~uint256(0xff)) | uint256(ftype));
     }
 
-    function _importCiphertext(bytes32 handle, bytes memory ciphertext) internal returns (bytes32) {
-        bytes32 ciphertextDigest = keccak256(ciphertext);
-        bytes32 snsDigest = keccak256(abi.encodePacked(ciphertextDigest));
-
-        (bool ok,) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSelector(
-                ADD_CIPHERTEXT_MATERIAL_SELECTOR,
-                handle,
-                uint256(1),
-                ciphertextDigest,
-                snsDigest
-            )
-        );
-
-        return handle;
+    function _bin(uint8 op, bytes32 lhs, bytes32 rhs, bytes1 s, uint8 rtype) internal returns (bytes32 r) {
+        r = _make(abi.encodePacked(op, lhs, rhs, s), rtype);
+        emit FheOp(op, r, lhs, rhs, s, rtype);
+    }
+    // arithmetic/bitwise: result type = type of lhs
+    function _arith(uint8 op, bytes32 lhs, bytes32 rhs, bytes1 s) internal returns (bytes32) {
+        return _bin(op, lhs, rhs, s, _typeOf(lhs));
+    }
+    // comparisons: result type = ebool (0)
+    function _cmp(uint8 op, bytes32 lhs, bytes32 rhs, bytes1 s) internal returns (bytes32) {
+        return _bin(op, lhs, rhs, s, uint8(FhishType.ebool));
     }
 
-    function fheAdd(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheAdd(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheAdd");
-        result = abi.decode(data, (bytes32));
+    function fheAdd(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(ADD, l, r, s); }
+    function fheSub(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(SUB, l, r, s); }
+    function fheMul(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(MUL, l, r, s); }
+    function fheDiv(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(DIV, l, r, s); }
+    function fheRem(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(REM, l, r, s); }
+    function fheBitAnd(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(AND, l, r, s); }
+    function fheBitOr(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(OR, l, r, s); }
+    function fheBitXor(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(XOR, l, r, s); }
+    function fheShl(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(SHL, l, r, s); }
+    function fheShr(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(SHR, l, r, s); }
+    function fheRotl(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(ROTL, l, r, s); }
+    function fheRotr(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(ROTR, l, r, s); }
+    function fheMin(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(MIN, l, r, s); }
+    function fheMax(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _arith(MAX, l, r, s); }
+    function fheEq(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(EQ, l, r, s); }
+    function fheNe(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(NE, l, r, s); }
+    function fheGe(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(GE, l, r, s); }
+    function fheGt(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(GT, l, r, s); }
+    function fheLe(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(LE, l, r, s); }
+    function fheLt(bytes32 l, bytes32 r, bytes1 s) external returns (bytes32) { return _cmp(LT, l, r, s); }
+
+    function fheNeg(bytes32 ct) external returns (bytes32 r) { r = _make(abi.encodePacked(NEG, ct), _typeOf(ct)); emit FheOp(NEG, r, ct, bytes32(0), 0, _typeOf(ct)); }
+    function fheNot(bytes32 ct) external returns (bytes32 r) { r = _make(abi.encodePacked(NOT, ct), _typeOf(ct)); emit FheOp(NOT, r, ct, bytes32(0), 0, _typeOf(ct)); }
+
+    function fheIfThenElse(bytes32 c, bytes32 a, bytes32 b) external returns (bytes32 r) {
+        uint8 t = _typeOf(a);
+        r = _make(abi.encodePacked(SELECT, c, a, b), t);
+        emit FheOp(SELECT, r, a, b, bytes1(0), t);
     }
 
-    function fheSub(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheSub(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheSub");
-        result = abi.decode(data, (bytes32));
+    function verifyCiphertext(bytes32 inputHandle, address caller, bytes memory /*proof*/, FhishType inputType)
+        external returns (bytes32 r)
+    {
+        // Input proof is a pass-through (matches fhish v2). The returned handle is bound to the
+        // client-uploaded ciphertext handle so the on-chain handle matches the off-chain ciphertext.
+        r = _make(abi.encodePacked("VERIFY", inputHandle, uint8(inputType)), uint8(inputType));
+        emit VerifyInput(r, inputHandle, caller, uint8(inputType));
     }
 
-    function fheMul(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheMul(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheMul");
-        result = abi.decode(data, (bytes32));
+    function trivialEncrypt(uint256 value, FhishType toType) external returns (bytes32 r) {
+        r = _make(abi.encodePacked("TRIVIAL", value, uint8(toType)), uint8(toType));
+        emit TrivialEncrypt(r, value, uint8(toType));
+    }
+    function trivialEncrypt(bytes memory value, FhishType toType) external returns (bytes32 r) {
+        r = _make(abi.encodePacked("TRIVIALB", value, uint8(toType)), uint8(toType));
+        emit TrivialEncrypt(r, 0, uint8(toType));
     }
 
-    function fheDiv(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheDiv(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheDiv");
-        result = abi.decode(data, (bytes32));
+    function cast(bytes32 ct, FhishType toType) external returns (bytes32 r) {
+        r = _make(abi.encodePacked(CAST, ct, uint8(toType)), uint8(toType));
+        emit Cast(r, ct, uint8(toType));
     }
 
-    function fheRem(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheRem(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheRem");
-        result = abi.decode(data, (bytes32));
-    }
+    function fheEq(bytes32 l, bytes memory r_, bytes1 s) external returns (bytes32 r) { r = _make(abi.encodePacked(EQ, l, r_, s), uint8(FhishType.ebool)); emit FheOp(EQ, r, l, keccak256(r_), s, uint8(FhishType.ebool)); }
+    function fheNe(bytes32 l, bytes memory r_, bytes1 s) external returns (bytes32 r) { r = _make(abi.encodePacked(NE, l, r_, s), uint8(FhishType.ebool)); emit FheOp(NE, r, l, keccak256(r_), s, uint8(FhishType.ebool)); }
 
-    function fheBitAnd(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheBitAnd(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheBitAnd");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheBitOr(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheBitOr(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheBitOr");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheBitXor(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheBitXor(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheBitXor");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheShl(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheShl(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheShl");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheShr(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheShr(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheShr");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheRotl(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheRotl(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheRotl");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheRotr(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheRotr(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheRotr");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheEq(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheEq(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheEq");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheNe(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheNe(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheNe");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheGe(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheGe(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheGe");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheGt(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheGt(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheGt");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheLe(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheLe(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheLe");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheLt(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheLt(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheLt");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheMin(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheMin(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheMin");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheMax(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheMax(bytes32,bytes32,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheMax");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheNeg(bytes32 ct) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheNeg(bytes32)", ct)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheNeg");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheNot(bytes32 ct) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheNot(bytes32)", ct)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheNot");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function verifyCiphertext(
-        bytes32 inputHandle,
-        address callerAddress,
-        bytes memory inputProof,
-        FhishType inputType
-    ) external returns (bytes32 result) {
-        _importCiphertext(inputHandle, inputProof);
-        IACL acl = IACL(FhishImpl.getFhishConfig().ACLAddress);
-        acl.allowTransient(inputHandle, callerAddress);
-        return inputHandle;
-    }
-
-    function cast(bytes32 ct, FhishType toType) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("cast(bytes32,uint8)", ct, uint8(toType))
-        );
-        if (!ok) revert CoprocessorCallFailed("cast");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function trivialEncrypt(uint256 ct, FhishType toType) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("trivialEncrypt(uint256,uint8)", ct, uint8(toType))
-        );
-        if (!ok) revert CoprocessorCallFailed("trivialEncrypt(uint256)");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function trivialEncrypt(bytes memory ct, FhishType toType) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("trivialEncrypt(bytes,uint8)", ct, uint8(toType))
-        );
-        if (!ok) revert CoprocessorCallFailed("trivialEncrypt(bytes)");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheEq(bytes32 lhs, bytes memory rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheEq(bytes32,bytes,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheEq(bytes)");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheNe(bytes32 lhs, bytes memory rhs, bytes1 scalarByte) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheNe(bytes32,bytes,bytes1)", lhs, rhs, scalarByte)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheNe(bytes)");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheIfThenElse(bytes32 control, bytes32 ifTrue, bytes32 ifFalse) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheIfThenElse(bytes32,bytes32,bytes32)", control, ifTrue, ifFalse)
-        );
-        if (!ok) revert CoprocessorCallFailed("fheIfThenElse");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheRand(FhishType randType) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheRand(uint8)", uint8(randType))
-        );
-        if (!ok) revert CoprocessorCallFailed("fheRand");
-        result = abi.decode(data, (bytes32));
-    }
-
-    function fheRandBounded(uint256 upperBound, FhishType randType) external returns (bytes32 result) {
-        (bool ok, bytes memory data) = FHEVM_PRECOMPILE.call(
-            abi.encodeWithSignature("fheRandBounded(uint256,uint8)", upperBound, uint8(randType))
-        );
-        if (!ok) revert CoprocessorCallFailed("fheRandBounded");
-        result = abi.decode(data, (bytes32));
-    }
+    function fheRand(FhishType randType) external returns (bytes32 r) { r = _make(abi.encodePacked(RAND, blockhash(block.number - 1), randType), uint8(randType)); emit Rand(r, 0, uint8(randType)); }
+    function fheRandBounded(uint256 upperBound, FhishType randType) external returns (bytes32 r) { r = _make(abi.encodePacked(RAND, upperBound, blockhash(block.number - 1), randType), uint8(randType)); emit Rand(r, upperBound, uint8(randType)); }
 }
