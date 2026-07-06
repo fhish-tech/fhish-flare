@@ -59,6 +59,11 @@ library FHE {
     function isAllowed(euint32 v, address account) internal view returns (bool) { return FhishTFHE.isAllowed(euint32.unwrap(v), account); }
     function isSenderAllowed(euint32 v) internal view returns (bool) { return FhishTFHE.isAllowed(euint32.unwrap(v), msg.sender); }
 
+    // ---- ebool ACL + handles ----
+    function allow(ebool v, address account) internal { FhishTFHE.allow(ebool.unwrap(v), account); }
+    function allowThis(ebool v) internal { FhishTFHE.allow(ebool.unwrap(v), address(this)); }
+    function toBytes32(ebool v) internal pure returns (bytes32) { return ebool.unwrap(v); }
+
     // ---- introspection ----
     function toBytes32(euint32 v) internal pure returns (bytes32) { return euint32.unwrap(v); }
     function isInitialized(euint32 v) internal pure returns (bool) { return euint32.unwrap(v) != bytes32(0); }

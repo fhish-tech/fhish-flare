@@ -53,6 +53,13 @@
       "0xA3e5Ca3ECBd2E9aD98ab909F80a2CF2DA04C396F"
     ],
     "ConfidentialVoting": "0x9B74Ee3E7B0186950474E9cE70f79AE45694c3aB",
-    "ConfidentialAuction": "0xfb96DBEFf6D5B8a4501Cd0aC26396F834cc74ea3"
+    "ConfidentialAuction": "0xfb96DBEFf6D5B8a4501Cd0aC26396F834cc74ea3",
+    "examples": {
+      "SealedVickreyAuction": "0xB9a033673428Cb049C17968327021D2fb18E5f4E",
+      "ConfidentialEligibility": "0xD84C2821fE4BC7d20057e890E9f2ad19d7549b01",
+      "ConfidentialCrowdfund": "0xE0E1485e9e440528A7A0010fD5C593BFef954eC2",
+      "ConfidentialLottery": "0xA0962fEE648E9Be5f91425c30b486AD8352c5c04",
+      "ConfidentialRatingPoll": "0x15c7B02458C87aa4d50795690b573526bb0981e9"
+    }
   }
 }
