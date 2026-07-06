@@ -48,6 +48,7 @@ Full record: [`deployments/coston2.json`](deployments/coston2.json).
 | **Hardened `FhishKMSVerifier`** (signer gated behind attestation — fixes an open `setGatewaySigner`) | ✅ done, deployed |
 | Attestation flow proven on-chain + **8/8 unit tests** | ✅ done |
 | **Real Zama-tfhe e2e on Coston2** (enc→homomorphic compute→decrypt→attested on-chain verify) | ✅ done ([e2e](offchain/gateway/e2e-coston2.mjs)) |
+| **Fully automated closed loop** (request→relayer decrypt→enclave sign→gateway attestation-verify→callback) | ✅ done ([closed-loop](offchain/gateway/closed-loop-coston2.mjs)) |
 | SIM-attestation dev mode (no GCP needed) | ✅ done |
 | **4 flagship apps** — auction@FTSO · token · FAsset@FXRP · voting | ✅ deployed, [tx proofs](examples/proofs.json) |
 | Live **FTSOv2** (FLR/USD) + **FAssets** (FXRP) reads on-chain | ✅ done |
