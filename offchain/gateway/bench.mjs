@@ -1,0 +1,14 @@
+import { loadOrGenerateKeys } from "../coprocessor/keys.mjs";
+const wasm = await import("fhish-wasm"); wasm.init_panic_hook?.();
+const { clientKey, publicKey } = await loadOrGenerateKeys(wasm);
+const ms = (f) => { const t=process.hrtime.bigint(); f(); return Number(process.hrtime.bigint()-t)/1e6; };
+const avg = (n,f)=>{ let s=0; for(let i=0;i<n;i++) s+=ms(f); return (s/n).toFixed(1); };
+const e32=(v)=>wasm.FhisUint32.encrypt(v,clientKey), e64=(v)=>wasm.FhisUint64.encrypt(BigInt(v),clientKey);
+const a=e32(42), b=e32(77), a64=e64(5_000_000_000), b64=e64(3_000_000_000), bl=wasm.FhisBool.encrypt(true,clientKey);
+console.log("ciphertext sizes (bytes):");
+console.log("  euint32:", a.serialize().length, " euint64:", a64.serialize().length, " ebool:", bl.serialize().length);
+console.log("  public key:", publicKey.serialize().length, " encrypt_with_public_key(euint32):", wasm.FhisUint32.encrypt_with_public_key(42,publicKey).serialize().length);
+console.log("op latency (ms avg of 5):");
+console.log("  add32:", avg(5,()=>a.add(b)), " mul32:", avg(5,()=>a.mul(b)), " gt32:", avg(5,()=>a.gt(b)), " min32:", avg(5,()=>a.min(b)));
+console.log("  add64:", avg(5,()=>a64.add(b64)), " mul64:", avg(5,()=>a64.mul(b64)));
+console.log("  decrypt32:", avg(5,()=>a.decrypt(clientKey)));

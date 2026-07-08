@@ -57,6 +57,25 @@ describe("FhishCoprocessor (symbolic FHE executor)", () => {
     expect(await c.fheAdd.staticCall(a, b, "0x00")).to.equal(await c.fheAdd.staticCall(a, b, "0x00"));
   });
 
+  it("supports euint64 (type byte 4)", async () => {
+    const c = await cop();
+    const h = await c["trivialEncrypt(uint256,uint8)"].staticCall(5_000_000_000n, 4);
+    expect(typeByte(h)).to.equal(4);
+  });
+
+  it("fheRandBounded emits Rand with an on-chain seed", async () => {
+    const c = await cop();
+    await expect(c.fheRandBounded(6, 3)).to.emit(c, "Rand");
+  });
+
+  it("select emits FheSelect carrying the control handle", async () => {
+    const c = await cop();
+    const a = await c["trivialEncrypt(uint256,uint8)"].staticCall(3, 3);
+    const b = await c["trivialEncrypt(uint256,uint8)"].staticCall(5, 3);
+    const ctrl = await c.fheGt.staticCall(b, a, "0x00");
+    await expect(c.fheIfThenElse(ctrl, a, b)).to.emit(c, "FheSelect");
+  });
+
   it("verifyCiphertext binds an input handle and emits VerifyInput", async () => {
     const c = await cop();
     const input = ethers.keccak256(ethers.toUtf8Bytes("ciphertext"));

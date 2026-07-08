@@ -38,6 +38,27 @@ euint32 w = FHE.select(p, a, b);  // if p then a else b (branchless)
 
 Every op runs **homomorphically off-chain**; on-chain it only records the operation over handles.
 
+## euint64, scalar, bitwise & shifts
+
+```solidity
+euint64 bal = FHE.asEuint64(5_000_000_000);   // real money amounts (> 2^32)
+euint64 s = FHE.add(bal, FHE.fromExternal64(encAmount, proof));
+
+euint32 y = FHE.addScalar(x, 100);             // cheaper: rhs is a plaintext constant
+euint32 m = FHE.and(a, b);                     // or / xor / shl / shr
+```
+
+## Encrypted randomness (verifiable)
+
+```solidity
+euint32 roll = FHE.randEuint32(6);                       // seed = blockhash (verifiable)
+euint32 fair = FHE.randEuint32Seeded(6, flareRandomSeed); // seed = Flare RandomNumberV2 (decentralized)
+```
+
+The coprocessor derives the value as `keccak256(seed) mod bound` and encrypts it — so anyone can
+recompute and **audit** the randomness from the on-chain seed. For high‑value fairness, pass Flare's
+enshrined secure RNG as the seed (no single party can bias it). This makes games/lotteries trustless.
+
 ## Access control (ACL)
 
 A handle can only be decrypted by addresses it's been `allow`-ed to. Grant access explicitly:

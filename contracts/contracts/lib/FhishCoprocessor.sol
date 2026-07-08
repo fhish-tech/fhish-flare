@@ -27,10 +27,13 @@ contract FhishCoprocessor is IFhishCoprocessor {
 
     /// @notice A homomorphic op the off-chain coprocessor must materialize.
     event FheOp(uint8 indexed op, bytes32 result, bytes32 lhs, bytes32 rhs, bytes1 scalarByte, uint8 resultType);
+    /// @notice Select needs THREE operands (control, ifTrue, ifFalse) — a plain FheOp can't carry the control.
+    event FheSelect(bytes32 result, bytes32 control, bytes32 ifTrue, bytes32 ifFalse, uint8 resultType);
     event TrivialEncrypt(bytes32 result, uint256 value, uint8 toType);
     event VerifyInput(bytes32 result, bytes32 inputHandle, address caller, uint8 inputType);
     event Cast(bytes32 result, bytes32 ct, uint8 toType);
-    event Rand(bytes32 result, uint256 upperBound, uint8 randType);
+    /// @notice Verifiable randomness: value derived from `seed` (bind to an on-chain RNG), encrypted off-chain.
+    event Rand(bytes32 result, uint256 upperBound, bytes32 seed, uint8 randType);
 
     // ---- handle helpers ----
     function _typeOf(bytes32 h) internal pure returns (uint8) { return uint8(uint256(h)); }
@@ -79,7 +82,7 @@ contract FhishCoprocessor is IFhishCoprocessor {
     function fheIfThenElse(bytes32 c, bytes32 a, bytes32 b) external returns (bytes32 r) {
         uint8 t = _typeOf(a);
         r = _make(abi.encodePacked(SELECT, c, a, b), t);
-        emit FheOp(SELECT, r, a, b, bytes1(0), t);
+        emit FheSelect(r, c, a, b, t); // carries the control handle so the coprocessor can materialize it
     }
 
     function verifyCiphertext(bytes32 inputHandle, address caller, bytes memory /*proof*/, FhishType inputType)
@@ -108,6 +111,20 @@ contract FhishCoprocessor is IFhishCoprocessor {
     function fheEq(bytes32 l, bytes memory r_, bytes1 s) external returns (bytes32 r) { r = _make(abi.encodePacked(EQ, l, r_, s), uint8(FhishType.ebool)); emit FheOp(EQ, r, l, keccak256(r_), s, uint8(FhishType.ebool)); }
     function fheNe(bytes32 l, bytes memory r_, bytes1 s) external returns (bytes32 r) { r = _make(abi.encodePacked(NE, l, r_, s), uint8(FhishType.ebool)); emit FheOp(NE, r, l, keccak256(r_), s, uint8(FhishType.ebool)); }
 
-    function fheRand(FhishType randType) external returns (bytes32 r) { r = _make(abi.encodePacked(RAND, blockhash(block.number - 1), randType), uint8(randType)); emit Rand(r, 0, uint8(randType)); }
-    function fheRandBounded(uint256 upperBound, FhishType randType) external returns (bytes32 r) { r = _make(abi.encodePacked(RAND, upperBound, blockhash(block.number - 1), randType), uint8(randType)); emit Rand(r, upperBound, uint8(randType)); }
+    function fheRand(FhishType randType) external returns (bytes32 r) {
+        bytes32 seed = blockhash(block.number - 1);
+        r = _make(abi.encodePacked(RAND, seed, randType), uint8(randType));
+        emit Rand(r, 0, seed, uint8(randType));
+    }
+    function fheRandBounded(uint256 upperBound, FhishType randType) external returns (bytes32 r) {
+        bytes32 seed = blockhash(block.number - 1);
+        r = _make(abi.encodePacked(RAND, upperBound, seed, randType), uint8(randType));
+        emit Rand(r, upperBound, seed, uint8(randType));
+    }
+    /// @notice Randomness bound to an EXPLICIT seed — pass Flare's secure RNG (RandomNumberV2) for
+    ///         verifiable, decentralized randomness that no single party can bias.
+    function fheRandBoundedSeeded(uint256 upperBound, bytes32 seed, FhishType randType) external returns (bytes32 r) {
+        r = _make(abi.encodePacked(RAND, upperBound, seed, randType), uint8(randType));
+        emit Rand(r, upperBound, seed, uint8(randType));
+    }
 }

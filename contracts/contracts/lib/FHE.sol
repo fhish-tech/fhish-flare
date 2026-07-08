@@ -9,6 +9,7 @@ import {FhishType} from "./FhishType.sol";
 ///         to the gateway. Passed into a contract alongside an input proof, exactly like Zama's
 ///         `externalEuint32`. `FHE.fromExternal` binds it into a usable on-chain `euint32`.
 type externalEuint32 is bytes32;
+type externalEuint64 is bytes32;
 
 /**
  * @title FHE — confidential smart contracts on Flare
@@ -51,6 +52,42 @@ library FHE {
     function gt(euint32 a, euint32 b) internal returns (ebool) { return FhishTFHE.gt(a, b); }
     function ge(euint32 a, euint32 b) internal returns (ebool) { return FhishTFHE.ge(a, b); }
     function select(ebool c, euint32 a, euint32 b) internal returns (euint32) { return FhishTFHE.select(c, a, b); }
+
+    // ---- scalar ops (cheaper: rhs is a plaintext constant) ----
+    function addScalar(euint32 a, uint32 s) internal returns (euint32) { return euint32.wrap(FhishImpl.add(euint32.unwrap(a), bytes32(uint256(s)), true)); }
+    function subScalar(euint32 a, uint32 s) internal returns (euint32) { return euint32.wrap(FhishImpl.sub(euint32.unwrap(a), bytes32(uint256(s)), true)); }
+    function mulScalar(euint32 a, uint32 s) internal returns (euint32) { return euint32.wrap(FhishImpl.mul(euint32.unwrap(a), bytes32(uint256(s)), true)); }
+
+    // ---- bitwise + shifts (euint32) ----
+    function and(euint32 a, euint32 b) internal returns (euint32) { return euint32.wrap(FhishImpl.bitAnd(euint32.unwrap(a), euint32.unwrap(b))); }
+    function or(euint32 a, euint32 b) internal returns (euint32) { return euint32.wrap(FhishImpl.bitOr(euint32.unwrap(a), euint32.unwrap(b))); }
+    function xor(euint32 a, euint32 b) internal returns (euint32) { return euint32.wrap(FhishImpl.bitXor(euint32.unwrap(a), euint32.unwrap(b))); }
+    function shl(euint32 a, uint8 bits) internal returns (euint32) { return euint32.wrap(FhishImpl.shl(euint32.unwrap(a), bits)); }
+    function shr(euint32 a, uint8 bits) internal returns (euint32) { return euint32.wrap(FhishImpl.shr(euint32.unwrap(a), bits)); }
+
+    // ---- encrypted randomness (verifiable; seed on-chain — pass Flare's RandomNumberV2 for security) ----
+    function randEuint32(uint256 upperBound) internal returns (euint32) { return euint32.wrap(FhishImpl.randBounded(upperBound, FhishType.euint32)); }
+    function randEuint32Seeded(uint256 upperBound, bytes32 seed) internal returns (euint32) { return euint32.wrap(FhishImpl.randBoundedSeeded(upperBound, seed, FhishType.euint32)); }
+    function randEuint64(uint256 upperBound) internal returns (euint64) { return euint64.wrap(FhishImpl.randBounded(upperBound, FhishType.euint64)); }
+
+    // ---- euint64 (for real money amounts > 2^32) ----
+    function fromExternal64(externalEuint64 h, bytes memory proof) internal returns (euint64) {
+        return euint64.wrap(FhishImpl.verify(externalEuint64.unwrap(h), proof, FhishType.euint64));
+    }
+    function asEuint64(uint64 value) internal returns (euint64) { return euint64.wrap(FhishImpl.trivialEncrypt(uint256(value), FhishType.euint64)); }
+    function add(euint64 a, euint64 b) internal returns (euint64) { return euint64.wrap(FhishImpl.add(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function sub(euint64 a, euint64 b) internal returns (euint64) { return euint64.wrap(FhishImpl.sub(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function mul(euint64 a, euint64 b) internal returns (euint64) { return euint64.wrap(FhishImpl.mul(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function min(euint64 a, euint64 b) internal returns (euint64) { return euint64.wrap(FhishImpl.min(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function max(euint64 a, euint64 b) internal returns (euint64) { return euint64.wrap(FhishImpl.max(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function eq(euint64 a, euint64 b) internal returns (ebool) { return ebool.wrap(FhishImpl.eq(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function lt(euint64 a, euint64 b) internal returns (ebool) { return ebool.wrap(FhishImpl.lt(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function gt(euint64 a, euint64 b) internal returns (ebool) { return ebool.wrap(FhishImpl.gt(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function ge(euint64 a, euint64 b) internal returns (ebool) { return ebool.wrap(FhishImpl.ge(euint64.unwrap(a), euint64.unwrap(b), false)); }
+    function allow(euint64 v, address account) internal { FhishTFHE.allow(euint64.unwrap(v), account); }
+    function allowThis(euint64 v) internal { FhishTFHE.allow(euint64.unwrap(v), address(this)); }
+    function toBytes32(euint64 v) internal pure returns (bytes32) { return euint64.unwrap(v); }
+    function isInitialized(euint64 v) internal pure returns (bool) { return euint64.unwrap(v) != bytes32(0); }
 
     // ---- ACL (who may use / decrypt a handle) ----
     function allow(euint32 v, address account) internal { FhishTFHE.allow(euint32.unwrap(v), account); }

@@ -104,6 +104,21 @@ library FhishImpl {
         result = IFhishCoprocessor($.FhishExecutorAddress).fheMax(lhs, rhs, scalarByte);
     }
 
+    function bitAnd(bytes32 l, bytes32 r) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheBitAnd(l, r, bytes1(0x00)); }
+    function bitOr(bytes32 l, bytes32 r) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheBitOr(l, r, bytes1(0x00)); }
+    function bitXor(bytes32 l, bytes32 r) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheBitXor(l, r, bytes1(0x00)); }
+    function shl(bytes32 l, uint8 bits) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheShl(l, bytes32(uint256(bits)), bytes1(0x01)); }
+    function shr(bytes32 l, uint8 bits) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheShr(l, bytes32(uint256(bits)), bytes1(0x01)); }
+
+    function randBounded(uint256 upper, FhishType t) internal returns (bytes32) { return IFhishCoprocessor(getFhishConfig().FhishExecutorAddress).fheRandBounded(upper, t); }
+    function randBoundedSeeded(uint256 upper, bytes32 seed, FhishType t) internal returns (bytes32) {
+        (bool ok, bytes memory data) = getFhishConfig().FhishExecutorAddress.call(
+            abi.encodeWithSignature("fheRandBoundedSeeded(uint256,bytes32,uint8)", upper, seed, uint8(t))
+        );
+        require(ok, "rand seeded failed");
+        return abi.decode(data, (bytes32));
+    }
+
     function eq(bytes32 lhs, bytes32 rhs, bool scalar) internal returns (bytes32 result) {
         bytes1 scalarByte = scalar ? bytes1(0x01) : bytes1(0x00);
         FhishConfigStruct storage $ = getFhishConfig();
